@@ -27,7 +27,7 @@
       linker_printf_fmt_level="long"
       linker_printf_width_precision_supported="Yes"
       linker_section_placement_file="flash_placement.xml"
-      linker_section_placement_macros="FLASH_PH_START=0x0;FLASH_PH_SIZE=0x100000;RAM_PH_START=0x20000000;RAM_PH_SIZE=0x40000;FLASH_START=0x26000;FLASH_SIZE=0xda000;RAM_START=0x20002500;RAM_SIZE=0x3dc00"
+      linker_section_placement_macros="FLASH_PH_START=0x0;FLASH_PH_SIZE=0x100000;RAM_PH_START=0x20000000;RAM_PH_SIZE=0x40000;FLASH_START=0x26000;FLASH_SIZE=0xda000;RAM_START=0x20002D00;RAM_SIZE=0x3d300"
       linker_section_placements_segments="FLASH RX 0x0 0x100000;RAM RWX 0x20000000 0x40000"
       macros="CMSIS_CONFIG_TOOL=../../../../../../external_tools/cmsisconfig/CMSIS_Configuration_Wizard.jar"
       project_directory=""
@@ -90,6 +90,7 @@
     <folder Name="Application">
       <file file_name="../../../main.c" />
       <file file_name="../config/sdk_config.h" />
+      <file file_name="../../../../../../components/libraries/hardfault/nrf52/handler/hardfault_handler_gcc.c" />
     </folder>
     <folder Name="nRF_Segger_RTT">
       <file file_name="../../../../../../external/segger_rtt/SEGGER_RTT.c" />
@@ -111,6 +112,11 @@
     <folder Name="Modified_BLE_Services">
       <file file_name="../../../../sdk_mod/ble_nus/ble_nus.c" />
       <file file_name="../../../../sdk_mod/ble_image_transfer_service/ble_image_transfer_service.c" />
+    </folder>
+    <folder Name="module">
+      <file file_name="../../../../module/nrf_serial_uart_transfer.c">
+        <configuration Name="Debug" build_exclude_from_build="Yes" />
+      </file>
     </folder>
     <folder Name="nRF_SoftDevice">
       <file file_name="../../../../../../components/softdevice/common/nrf_sdh.c" />

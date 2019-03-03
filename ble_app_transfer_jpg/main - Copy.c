@@ -74,7 +74,7 @@
 #include "nrf_log_ctrl.h"
 #include "nrf_log_default_backends.h"
 
-#include "test_image.h"
+// #include "test_image.h"
 
 #if defined (UART_PRESENT)
 #include "nrf_uart.h"
@@ -83,7 +83,9 @@
 #include "nrf_uarte.h"
 #endif
 
+#include "nrf_balloc.h"
 #include "nrf_drv_uart.h"
+#include "app_fifo.h"
 
 #define ADVERTISING_LED                 BSP_BOARD_LED_0                         /**< Is on when device is advertising. */
 #define CONNECTED_LED                   BSP_BOARD_LED_1                         /**< Is on when device has connected. */
@@ -121,7 +123,7 @@
 #ifdef SVCALL_AS_NORMAL_FUNCTION
 #define SCHED_QUEUE_SIZE                    40                                         /**< Maximum number of events in the scheduler queue. More is needed in case of Serialization. */
 #else
-#define SCHED_QUEUE_SIZE                    20                                         /**< Maximum number of events in the scheduler queue. */
+#define SCHED_QUEUE_SIZE                    10                                         /**< Maximum number of events in the scheduler queue. */
 #endif
 
 #define TX_POWER_LEVEL                  (4)                                    /**< TX Power Level value. This will be set both in the TX Power service, in the advertising data, and also used to set the radio transmit power. */
@@ -132,7 +134,6 @@
 
 #define DEAD_BEEF                       0xDEADBEEF                              /**< Value used as error code on stack dump, can be used to identify stack location on stack unwind. */
 
-#define IMAGE_BUFFER_SIZE     0x1000
 
 BLE_NUS_DEF(m_nus, NRF_SDH_BLE_TOTAL_LINK_COUNT);                                   /**< BLE NUS service instance. */
 BLE_ITS_DEF(m_its, NRF_SDH_BLE_TOTAL_LINK_COUNT);                                   /**< BLE JPG Transfer service instance. */
@@ -141,99 +142,307 @@ NRF_BLE_GATT_DEF(m_gatt);                                                       
 NRF_BLE_QWR_DEF(m_qwr);                                                         /**< Context for the Queued Write module.*/
 
 
-#define BATTERY_LEVEL_MEAS_INTERVAL         APP_TIMER_TICKS(1000)                   /**< Battery level measurement interval (ticks). */
-#define MIN_BATTERY_LEVEL                   81                                      /**< Minimum simulated battery level. */
-#define MAX_BATTERY_LEVEL                   100                                     /**< Maximum simulated 7battery level. */
-#define BATTERY_LEVEL_INCREMENT             1                                       /**< Increment between each simulated battery level measurement. */
-
-APP_TIMER_DEF(m_battery_timer_id);                                  /**< Battery timer. */
-
 static uint16_t m_conn_handle = BLE_CONN_HANDLE_INVALID;                        /**< Handle of the current connection. */
 
 static uint8_t m_adv_handle = BLE_GAP_ADV_SET_HANDLE_NOT_SET;                   /**< Advertising handle used to identify an advertising set. */
 static uint8_t m_enc_advdata[BLE_GAP_ADV_SET_DATA_SIZE_MAX];                    /**< Buffer for storing an encoded advertising set. */
 static uint8_t m_enc_scan_response_data[BLE_GAP_ADV_SET_DATA_SIZE_MAX];         /**< Buffer for storing an encoded scan data. */
 
-static nrf_drv_uart_t m_uart =  NRF_DRV_UART_INSTANCE(0);
-static uint8_t m_rx_byte[UART_RX_BUF_SIZE];
-
-static uint8_t m_rx_image_buffer[IMAGE_BUFFER_SIZE];
-static uint16_t m_rx_image_buffer_len = 0;
 
 static uint8_t m_new_command_received = 0;
 static uint8_t m_new_resolution, m_new_phy;
 static bool m_stream_mode_active = false;
 static ble_its_ble_params_info_t m_ble_params_info = {20, 50, 1, 1};
 
+
 static uint16_t m_ble_nus_max_data_len = BLE_GATT_ATT_MTU_DEFAULT - 3;              /**< Maximum length of data (in bytes) that can be transmitted to the peer by the Nordic UART service module. */
 static uint16_t m_ble_its_max_data_len = BLE_GATT_ATT_MTU_DEFAULT - 3;              /**< Maximum length of data (in bytes) that can be transmitted to the peer by the Nordic UART service module. */
 
+static uint16_t m_ble_mtu_length = BLE_GATT_ATT_MTU_DEFAULT - 3;
 //use of the data transfer
 static uint8_t img_data_buffer[BLE_ITS_MAX_DATA_LEN];
 static uint32_t img_data_length = BLE_ITS_MAX_DATA_LEN;
 static uint8_t m_buffer_transfer_index = 0;
-static bool test_flag = false;
-static bool start_thoughput_test = false;
-static uint32_t frameCount = 0;
-static uint32_t frameCount_previous = 0;
+// static bool test_flag = false;
+// static bool start_thoughput_test = false;
+// static uint32_t frameCount = 0;
+// static uint32_t frameCount_previous = 0;
 
-static bool m_active = false;
-static uint16_t m_ble_mtu_length = 244;//BLE_GATT_ATT_MTU_DEFAULT - 3;
-static uint16_t m_ble_dle_length = 244;//BLE_GATT_ATT_MTU_DEFAULT - 3;
+static nrf_drv_uart_t m_uart =  NRF_DRV_UART_INSTANCE(0);
+static uint8_t m_rx_byte;
+static bool m_active;
 
-static bool m_file_is_sending = false;
+
+static uint8_t m_tx_buf[BLE_GATT_ATT_MTU_DEFAULT];
+static uint8_t m_rx_buf[BLE_GATT_ATT_MTU_DEFAULT];
+
+enum {
+        APP_CMD_NOCOMMAND = 0,
+        APP_CMD_SINGLE_CAPTURE,
+        APP_CMD_START_STREAM,
+        APP_CMD_STOP_STREAM,
+        APP_CMD_CHANGE_RESOLUTION,
+        APP_CMD_CHANGE_PHY,
+        APP_CMD_SEND_BLE_PARAMS
+};
+
+
+
+// typedef struct nrf_jpg_file_info_s
+// {
+//         uint32_t file_size_bytes;
+//         bool isGetFileSize;
+//         uint32_t offset;
+// } nrf_jpg_file_info_t;
+//
+// nrf_jpg_file_info_t m_jpg_file =      \
+// {                                     \
+//         .file_size_bytes = 0,         \
+//         .isGetFileSize = false,       \
+//         .offset = 0                   \
+// };
 
 
 typedef enum {
-        PAYLOAD_FILE_OPCODE_PING         = 0xA0,
-        PAYLOAD_FILE_OPCODE_FILEINFO_RSP = 0xA1,
-        PAYLOAD_FILE_OPCODE_MTU_REQ      = 0xA2,
-        PAYLOAD_FILE_OPCODE_MTU_RSP      = 0xA3,
-        PAYLOAD_FILE_OPCODE_DATA_REQ     = 0xA4,
-        PAYLOAD_FILE_OPCODE_DATA_RSP     = 0xA5,
-        PAYLOAD_FILE_OPCODE_COMPLETE     = 0xA6,
-        PAYLOAD_FILE_OPCODE_COMPLETE_ACK = 0xA7,
-        PAYLOAD_FILE_OPCODE_DATA_RSP_LAST = 0xA8,
-} serial_payload_file_cmd_t;
+        // PAYLOAD_JPG_HEADER_FILESIZE = 0xAA,
+        // PAYLOAD_JPG_HEADER_CRC32    = 0xAB,
+        // PAYLOAD_JPG_HEADER_DATA_FIRST_RPN = 0xAC,
+        // PAYLOAD_JPG_HEADER_DATA     = 0xAD,
+        // PAYLOAD_JPG_HEADER_MTU_RSP  = 0xAE,
+        // PAYLOAD_JPG_HEADER_DONE_RSP = 0xAF,
 
-typedef enum {
-        eSERIAL_FILE_OBJECT_STATE_IDLE   = 0x00,
-        eSERIAL_FILE_OBJECT_STATE_PING,
-        eSERIAL_FILE_OBJECT_STATE_GET_FILE_INFO,
-        eSERIAL_FILE_OBJECT_STATE_MTU_REQ,
-        eSERIAL_FILE_OBJECT_STATE_MTU_RSP,
-        eSERIAL_FILE_OBJECT_STATE_DATA_REQ,
-        eSERIAL_FILE_OBJECT_STATE_DATA_RSP,
-        eSERIAL_FILE_OBJECT_STATE_BLE_TX,
-        eSERIAL_FILE_OBJECT_STATE_BLE_COMPLETE,
-        eSERIAL_FILE_OBJECT_STATE_DONE
-} serial_file_object_state_t;
+        PAYLOAD_JPG_OPCODE_PING         = 0xA0,
+        PAYLOAD_JPG_OPCODE_FILEINFO_RSP = 0xA1,
+        PAYLOAD_JPG_OPCODE_MTU_REQ      = 0xA2,
+        PAYLOAD_JPG_OPCODE_MTU_RSP      = 0xA3,
+        PAYLOAD_JPG_OPCODE_DATA_REQ     = 0xA4,
+        PAYLOAD_JPG_OPCODE_DATA_RSP     = 0xA5,
+        PAYLOAD_JPG_OPCODE_COMPLETE     = 0xA6,
+        PAYLOAD_JPG_OPCODE_COMPLETE_ACK = 0xA7,
+} payload_jpg_cmd_type;
+
+#define PAYLOAD_JPG_OPCODE 0
 
 
-typedef struct serial_file_object_s
+// static uint32_t fileSize = 0;
+static uint32_t crc32    = 0;
+static uint32_t jpg_offset = 0;
+static ble_its_img_info_t m_image_info;
+//static uint8_t test_image[100000];
+static uint32_t test_image_length = 0;
+
+// static uint8_t jpg_image_buffer[2048];
+// static uint32_t jpg_image_buffer_length = 0;
+
+static app_fifo_t m_rx_fifo;                                                /**< RX FIFO buffer for storing data received on the UART until the application fetches them using app_uart_get(). */
+
+// Create a buffer for the FIFO
+//static uint16_t image_fifo_buffer_size = 2048;
+#define FIFO_BUFFER_SIZE    2048
+uint8_t image_fifo_buffer[FIFO_BUFFER_SIZE];
+uint8_t image_read_buffer[FIFO_BUFFER_SIZE];
+
+static uint32_t create_circular_buffer(void)
 {
-        uint32_t filesize;
-        uint32_t crc32;
-        uint32_t offset_req;
-        uint32_t offset_rsp;
-        uint32_t length_req;
-        uint8_t mtusize;
-        // serial_payload_file_cmd_t state;
-} serial_file_object_t;
+        ret_code_t err_code;
+        // Configure buffer RX buffer.
+        err_code = app_fifo_init(&m_rx_fifo, image_fifo_buffer, (uint16_t)sizeof(image_fifo_buffer));
+        VERIFY_SUCCESS(err_code);
+        return err_code;
+}
 
-typedef struct serial_object_data_request_s
+static uint32_t write_circular_buffer(uint8_t const * p_byte_array, uint32_t * p_size)
 {
-        uint8_t payload_len;
-        serial_file_object_state_t opcode;
-        uint16_t request_len;
-        uint32_t offset_addr;
-} serial_object_data_request_t;
+        uint32_t err_code = app_fifo_write(&m_rx_fifo, p_byte_array, p_size);
+        return err_code;
+}
 
-static serial_file_object_t m_file_object = {0};
+static uint32_t read_circular_buffer(uint8_t * p_byte_array, uint32_t * p_size)
+{
+        uint32_t err_code = app_fifo_read(&m_rx_fifo, p_byte_array, p_size);
+        return err_code;
+}
 
-static serial_object_data_request_t m_data_request_obj;
-static void serial_uart_response(serial_payload_file_cmd_t cmd);
-static void transfer_image_buffer(void * p_event_data, uint16_t size);
+static void jpg_send_image_info(void * p_event_data, uint16_t size)
+{
+        ret_code_t err_code;
+        if (m_conn_handle != BLE_CONN_HANDLE_INVALID)
+        {
+                err_code = ble_its_img_info_send(&m_its, &m_image_info);
+                APP_ERROR_CHECK(err_code);
+        }
+}
+
+static void jpg_send_file_fragment(void * p_event_data, uint16_t size)
+{
+        ret_code_t err_code;
+        uint32_t img_data_length = 244;
+        uint8_t img_data_buffer[255];
+
+        //err_code = read_circular_buffer(img_data_buffer, &img_data_length);
+        err_code = app_fifo_read(&m_rx_fifo, &img_data_buffer, &img_data_length);
+        APP_ERROR_CHECK(err_code);
+
+        do
+        {
+                err_code = ble_its_send_file_fragment(&m_its, img_data_buffer, img_data_length);
+                if(err_code == NRF_SUCCESS)
+                {
+                        img_data_length = 0;
+                }
+        } while(err_code == NRF_SUCCESS);
+        NRF_LOG_INFO("Fifo Read %04x", img_data_length);
+}
+
+void transport_serial_tx_command_handler(payload_jpg_cmd_type cmd_type)
+{
+        uint8_t tx_buffer[16];
+        uint32_t length = 0;
+        ret_code_t err_code;
+        switch (cmd_type)
+        {
+        case PAYLOAD_JPG_OPCODE_PING:
+                tx_buffer[0] = PAYLOAD_JPG_OPCODE_PING;
+                app_uart_put(tx_buffer[0]);
+                break;
+        case PAYLOAD_JPG_OPCODE_FILEINFO_RSP:
+                tx_buffer[0] = PAYLOAD_JPG_OPCODE_FILEINFO_RSP;
+                app_uart_put(tx_buffer[0]);
+                break;
+        case PAYLOAD_JPG_OPCODE_MTU_RSP:
+                tx_buffer[0] = PAYLOAD_JPG_OPCODE_MTU_RSP;
+                tx_buffer[1] = (uint8_t) m_ble_mtu_length;
+                for (i=0; i<2; i++)
+                {
+                        do {
+                                /* code */
+                                err_code  = app_uart_put(tx_buffer[i]);
+                        } while(err_code == NRF_SUCCESS);
+                }
+                break;
+        case PAYLOAD_JPG_OPCODE_DATA_REQ:
+                tx_buffer[0] = (uint8_t) offset & 0xFF;
+                tx_buffer[1] = (uint8_t) (offset >> 8) & 0xFF;
+                tx_buffer[2] = (uint8_t) (offset >> 16) & 0xFF;
+                tx_buffer[3] = (uint8_t) (offset >> 24) & 0xFF;
+
+                for (i=0; i<2; i++)
+                {
+                        do {
+                                /* code */
+                                err_code  = app_uart_put(tx_buffer[i]);
+                        } while(err_code == NRF_SUCCESS);
+                }
+                break;
+        case PAYLOAD_JPG_OPCODE_COMPLETE_ACK:
+                break;
+        case PAYLOAD_JPG_HEADER_MTU_RSP:
+                tx_buffer[0] = PAYLOAD_JPG_HEADER_MTU_RSP;
+                tx_buffer[1] = m_ble_its_max_data_len;
+                for (uint32_t i = 0; i < 2; i++)
+                {
+                        do
+                        {
+                                err_code = app_uart_put(tx_buffer[i]);
+                                if ((err_code != NRF_SUCCESS) && (err_code != NRF_ERROR_BUSY))
+                                {
+                                        NRF_LOG_ERROR("Failed receiving NUS message. Error 0x%x. ", err_code);
+                                        APP_ERROR_CHECK(err_code);
+                                }
+                        } while (err_code == NRF_ERROR_BUSY);
+                }
+                break;
+        }
+}
+
+void rpc_command_handler(uint8_t* cmd_data, uint8_t cmd_length)
+{
+        ret_code_t err_code;
+        uint32_t fileSize = 0;
+        uint8_t number_prn;
+        uint8_t x;
+        switch(cmd_data[PAYLOAD_JPG_OPCODE])
+        {
+        case PAYLOAD_JPG_HEADER_FILESIZE:
+                fileSize = cmd_data[1] + (cmd_data[2] << 8) + (cmd_data[3] << 16) + (cmd_data[4] << 24);
+                NRF_LOG_DEBUG("File Size = %08x", fileSize);
+                NRF_LOG_HEXDUMP_INFO(cmd_data, cmd_length);
+                test_image_length = fileSize;
+                m_image_info.file_size_bytes = fileSize;
+                err_code = app_sched_event_put(NULL, 0, jpg_send_image_info);
+                APP_ERROR_CHECK(err_code);
+                number_prn = cmd_data[5];
+                break;
+        case PAYLOAD_JPG_HEADER_CRC32:
+                crc32 =cmd_data[1] + (cmd_data[2] << 8) + (cmd_data[3] << 16) + (cmd_data[4] << 24);
+                break;
+        case PAYLOAD_JPG_HEADER_DATA:
+        {
+                uint32_t length = cmd_length-1;
+                uint8_t *p_data = cmd_data + 1;
+                // err_code = write_circular_buffer(&cmd_data[1],&length);
+
+                err_code = app_fifo_write(&m_rx_fifo, p_data, &length);
+                if (m_conn_handle != BLE_CONN_HANDLE_INVALID)
+                {
+                        err_code = app_sched_event_put(NULL, 0, jpg_send_file_fragment);
+                        // err_code = ble_its_send_file_fragment(&m_its, &cmd_data[1], cmd_length-1);
+                        APP_ERROR_CHECK(err_code);
+                }
+                jpg_offset += cmd_length-1;
+                NRF_LOG_INFO("offset = %04x, %04x", jpg_offset, length);
+        }       break;
+        case PAYLOAD_JPG_HEADER_MTU_RSP:
+                break;
+        case PAYLOAD_JPG_HEADER_DONE_RSP:
+                break;
+        default:
+                break;
+        }
+}
+
+/**@snippet [Handling the data received over UART] */
+void uart_event_handle(app_uart_evt_t * p_event)
+{
+        static uint8_t data_array[BLE_NUS_MAX_DATA_LEN];
+        static uint8_t index = 0;
+        static uint8_t total_len;
+        static uint8_t is_first_byte = 1;
+        uint32_t err_code;
+
+        switch (p_event->evt_type)
+        {
+        case APP_UART_DATA_READY:
+                if(is_first_byte == 1) {
+                        UNUSED_VARIABLE(app_uart_get(&total_len));
+                        is_first_byte = 0;
+                        NRF_LOG_DEBUG("wait cmd length = %02x\n", total_len);
+                }else{
+                        UNUSED_VARIABLE(app_uart_get(&data_array[index]));
+                        NRF_LOG_DEBUG("got %d, data = %02x\n", index, data_array[index]);
+                        index++;
+                }
+                if(index == total_len) {
+                        //NRF_LOG_HEXDUMP_INFO(data_array, index);
+                        NRF_LOG_INFO("Payload %02d, %04d", index, jpg_offset);
+                        rpc_command_handler(data_array, index);
+                        index = 0;
+                        is_first_byte = 1;
+                }
+                break;
+
+        case APP_UART_COMMUNICATION_ERROR:
+                APP_ERROR_HANDLER(p_event->data.error_communication);
+                break;
+
+        case APP_UART_FIFO_ERROR:
+                APP_ERROR_HANDLER(p_event->data.error_code);
+                break;
+
+        default:
+                break;
+        }
+}
 
 /**@brief Struct that contains pointers to the encoded advertising data. */
 static ble_gap_adv_data_t m_adv_data =
@@ -278,23 +487,6 @@ static void leds_init(void)
 }
 
 
-
-static uint32_t time_count = 0;
-/**@brief Function for handling the Battery measurement timer timeout.
- *
- * @details This function will be called each time the battery level measurement timer expires.
- *
- * @param[in] p_context  Pointer used for passing some arbitrary information (context) from the
- *                       app_start_timer() call to the timeout handler.
- */
-static void battery_level_meas_timeout_handler(void * p_context)
-{
-        UNUSED_PARAMETER(p_context);
-        //serial_uart_response(PAYLOAD_FILE_OPCODE_PING);
-        NRF_LOG_INFO("Time count = %d", time_count);
-        time_count++;
-}
-
 /**@brief Function for the Timer initialization.
  *
  * @details Initializes the timer module.
@@ -304,13 +496,6 @@ static void timers_init(void)
         // Initialize timer module, making it use the scheduler
         ret_code_t err_code = app_timer_init();
         APP_ERROR_CHECK(err_code);
-
-        // Create timers.
-        err_code = app_timer_create(&m_battery_timer_id,
-                                    APP_TIMER_MODE_REPEATED,
-                                    battery_level_meas_timeout_handler);
-        APP_ERROR_CHECK(err_code);
-
 }
 
 /**@brief Function for changing the tx power.
@@ -397,6 +582,9 @@ static void nus_data_handler(ble_nus_evt_t * p_evt)
                 NRF_LOG_INFO("NUS : BLE_NUS_EVT_COMM_STOPPED");
         }
 }
+
+
+
 /**@snippet [Handling the data received over BLE] */
 
 /**@brief Function for handling events from the GATT library. */
@@ -406,17 +594,14 @@ void gatt_evt_handler(nrf_ble_gatt_t * p_gatt, nrf_ble_gatt_evt_t const * p_evt)
         if ((m_conn_handle == p_evt->conn_handle) && (p_evt->evt_id == NRF_BLE_GATT_EVT_ATT_MTU_UPDATED))
         {
                 data_length = p_evt->params.att_mtu_effective - OPCODE_LENGTH - HANDLE_LENGTH;
-                //m_ble_params_info.mtu = m_ble_its_max_data_len;
-                m_ble_mtu_length = data_length;
-                m_ble_its_max_data_len = data_length;
+                m_ble_mtu_length = data_length;//m_ble_params_info.mtu = m_ble_its_max_data_len;
+
                 NRF_LOG_INFO("gatt_event: ATT MTU is set to 0x%X (%d)", data_length, data_length);
         }
         else if ((m_conn_handle == p_evt->conn_handle) && (p_evt->evt_id == NRF_BLE_GATT_EVT_DATA_LENGTH_UPDATED))
         {
                 data_length = p_evt->params.att_mtu_effective - OPCODE_LENGTH - HANDLE_LENGTH - 4;
-                m_ble_mtu_length = data_length;
-                m_ble_its_max_data_len = data_length;
-                NRF_LOG_INFO("gatt_event: Data len is set to 0x%X (%d)", data_length, data_length);
+                NRF_LOG_INFO("gatt_evt_handler: Data len is set to 0x%X (%d)", data_length, data_length);
         }
         //NRF_LOG_DEBUG("ATT MTU exchange completed. central 0x%x peripheral 0x%x",
         //            p_gatt->att_mtu_desired_central,
@@ -432,13 +617,14 @@ static void gatt_init(void)
         err_code = nrf_ble_gatt_init(&m_gatt, gatt_evt_handler);
         APP_ERROR_CHECK(err_code);
 
-        err_code = nrf_ble_gatt_att_mtu_periph_set(&m_gatt, NRF_SDH_BLE_GATT_MAX_MTU_SIZE);
-        APP_ERROR_CHECK(err_code);
-
 #if !defined(S112)
         err_code = nrf_ble_gatt_data_length_set(&m_gatt, BLE_CONN_HANDLE_INVALID, NRF_SDH_BLE_GAP_DATA_LENGTH);
         APP_ERROR_CHECK(err_code);
 #endif
+
+        err_code = nrf_ble_gatt_att_mtu_periph_set(&m_gatt, NRF_SDH_BLE_GATT_MAX_MTU_SIZE);
+        APP_ERROR_CHECK(err_code);
+
 }
 
 
@@ -504,60 +690,7 @@ static void nrf_qwr_error_handler(uint32_t nrf_error)
 
 
 
-/**@brief   Function for handling app_uart events.
- *
- * @details This function will receive a single character from the app_uart module and append it to
- *          a string. The string will be be sent over BLE when the last character received was a
- *          'new line' '\n' (hex 0x0A) or if the string has reached the maximum data length.
- */
-/**@snippet [Handling the data received over UART] */
-void uart_event_handle(app_uart_evt_t * p_event)
-{
-        static uint8_t data_array[BLE_NUS_MAX_DATA_LEN];
-        static uint8_t index = 0;
-        uint32_t err_code;
 
-        switch (p_event->evt_type)
-        {
-        case APP_UART_DATA_READY:
-                UNUSED_VARIABLE(app_uart_get(&data_array[index]));
-                index++;
-
-                if ((data_array[index - 1] == '\n') ||
-                    (data_array[index - 1] == '\r') ||
-                    (index >= m_ble_nus_max_data_len))
-                {
-                        if (index > 1)
-                        {
-                                NRF_LOG_DEBUG("Ready to send data over BLE NUS");
-                                NRF_LOG_HEXDUMP_DEBUG(data_array, index);
-                                do
-                                {
-                                        uint16_t length = (uint16_t)index;
-                                        err_code = ble_nus_data_send(&m_nus, data_array, &length, m_conn_handle);
-                                        if ((err_code != NRF_ERROR_INVALID_STATE) &&
-                                            (err_code != NRF_ERROR_RESOURCES) &&
-                                            (err_code != NRF_ERROR_NOT_FOUND))
-                                        {
-                                                APP_ERROR_CHECK(err_code);
-                                        }
-                                } while (err_code == NRF_ERROR_RESOURCES);
-                        }
-                }
-                break;
-
-        case APP_UART_COMMUNICATION_ERROR:
-                APP_ERROR_HANDLER(p_event->data.error_communication);
-                break;
-
-        case APP_UART_FIFO_ERROR:
-                APP_ERROR_HANDLER(p_event->data.error_code);
-                break;
-
-        default:
-                break;
-        }
-}
 
 /**@brief  Function for initializing the UART module.
  */
@@ -591,13 +724,22 @@ static void uart_init(void)
 /**@snippet [UART Initialization] */
 
 
+
+
 void its_data_file_test(void * p_event_data, uint16_t size)
 {
         uint32_t err_code;
-        NRF_LOG_INFO("_actest_image %04d", sizeof(_actest_image));
-        err_code = ble_its_send_file(&m_its, _actest_image, sizeof(_actest_image), m_ble_its_max_data_len);
-        APP_ERROR_CHECK(err_code);
+        // NRF_LOG_INFO("_actest_image %04d", sizeof(_actest_image));
+        NRF_LOG_INFO("its_data_file_test %08d", test_image_length);
+
+//        err_code = ble_its_send_file(&m_its, _actest_image, sizeof(_actest_image), m_ble_its_max_data_len);
+//        err_code = ble_its_send_file(&m_its, test_image, test_image_length, m_ble_its_max_data_len);
+//        APP_ERROR_CHECK(err_code);
+
+        // test_image_length=0;
 }
+
+
 
 
 static void its_data_handler(ble_its_t * p_its, uint8_t const * p_data, uint16_t length)
@@ -610,10 +752,16 @@ static void its_data_handler(ble_its_t * p_its, uint8_t const * p_data, uint16_t
         // Take picture
         case APP_CMD_SINGLE_CAPTURE:
         case APP_CMD_SEND_BLE_PARAMS:
+
+
                 m_new_command_received = p_data[0];
 
                 NRF_LOG_INFO("APP_CMD_SINGLE_CAPTURE");
-                serial_uart_response(PAYLOAD_FILE_OPCODE_PING);
+
+                jpg_send_command_handler(PAYLOAD_JPG_HEADER_MTU_RSP);
+                // err_code = app_sched_event_put(NULL, 0, its_data_file_test);
+                // APP_ERROR_CHECK(err_code);
+
 
                 break;
 
@@ -636,30 +784,15 @@ static void its_data_handler(ble_its_t * p_its, uint8_t const * p_data, uint16_t
                 m_new_command_received = APP_CMD_CHANGE_PHY;
                 m_new_phy = p_data[1];
                 break;
-        case APP_CMD_SEND_BUFFER_REQ:
-                NRF_LOG_INFO("APP_CMD_SEND_BUFFER_REQ");
-                m_file_is_sending = true;
-                err_code = app_sched_event_put(NULL, 0, transfer_image_buffer);
-                APP_ERROR_CHECK(err_code);
-
-                break;
-
-        case APP_CMD_SEND_BUFFER_COMPLETE:
-                NRF_LOG_INFO("APP_CMD_SEND_BUFFER_COMPLETE");
-                // err_code = app_sched_event_put(NULL, 0, transfer_image_buffer);
-                // APP_ERROR_CHECK(err_code);
-                if (m_file_is_sending == true)
-                        if (m_file_object.offset_req != m_file_object.filesize)
-                                serial_uart_response(PAYLOAD_FILE_OPCODE_DATA_REQ);
-                        else
-                                m_file_is_sending = false;
-                break;
 
         default:
                 NRF_LOG_ERROR("Unknown command!!");
                 break;
         }
 }
+
+
+
 
 /**@brief Function for initializing services that will be used by the application.
  */
@@ -675,16 +808,6 @@ static void services_init(void)
 
         err_code = nrf_ble_qwr_init(&m_qwr, &qwr_init);
         APP_ERROR_CHECK(err_code);
-
-//
-//        // Initialize NUS.
-        // memset(&nus_init, 0, sizeof(nus_init));
-        //
-        // nus_init.data_handler = nus_data_handler;
-        //
-        // err_code = ble_nus_init(&m_nus, &nus_init);
-        //
-        // APP_ERROR_CHECK(err_code);
 
         // Initialize ITS.
         memset(&its_init, 0, sizeof(its_init));
@@ -787,9 +910,6 @@ static void ble_evt_handler(ble_evt_t const * p_ble_evt, void * p_context)
                 err_code = nrf_ble_qwr_conn_handle_assign(&m_qwr, m_conn_handle);
                 APP_ERROR_CHECK(err_code);
 
-                // Start application timers.
-                err_code = app_timer_start(m_battery_timer_id, BATTERY_LEVEL_MEAS_INTERVAL, NULL);
-                APP_ERROR_CHECK(err_code);
 
                 tx_power_set();
 
@@ -855,6 +975,10 @@ static void ble_evt_handler(ble_evt_t const * p_ble_evt, void * p_context)
                 APP_ERROR_CHECK(err_code);
                 break;
 
+        case BLE_GATTS_EVT_HVN_TX_COMPLETE:
+
+                break;
+
         default:
                 // No implementation needed.
                 break;
@@ -916,10 +1040,16 @@ static void button_event_handler(uint8_t pin_no, uint8_t button_action)
         case LEDBUTTON_BUTTON_1:
                 if (button_action == APP_BUTTON_PUSH)
                 {
-                        serial_uart_response(PAYLOAD_FILE_OPCODE_DATA_REQ);
+
+                        err_code = app_sched_event_put(NULL, 0, its_data_file_test);
+                        APP_ERROR_CHECK(err_code);
+
+                        // jpg_file_command_handler();
+//                        NRF_LOG_INFO("UART init");
+//                        transfer_serial_uart_init();
                 }
-                printf("Testing 1");
                 break;
+
 
 
         default:
@@ -939,6 +1069,10 @@ static void buttons_init(void)
         static app_button_cfg_t buttons[] =
         {
                 {LEDBUTTON_BUTTON_1, false, BUTTON_PULL, button_event_handler},
+                {LEDBUTTON_BUTTON_2, false, BUTTON_PULL, button_event_handler},
+                {LEDBUTTON_BUTTON_3, false, BUTTON_PULL, button_event_handler},
+                {LEDBUTTON_BUTTON_4, false, BUTTON_PULL, button_event_handler},
+
         };
 
         err_code = app_button_init(buttons, ARRAY_SIZE(buttons),
@@ -974,243 +1108,69 @@ static void idle_state_handle(void)
 {
         app_sched_execute();
         while(NRF_LOG_PROCESS());
-        //UNUSED_RETURN_VALUE(NRF_LOG_PROCESS());
+
         nrf_pwr_mgmt_run();
 }
 
-static void transfer_image_buffer(void * p_event_data, uint16_t size)
-{
-        uint32_t err_code;
-        NRF_LOG_INFO("transfer_image_buffer offset %04x m_rx_image_buffer_len = %04x m_ble_its_max_data_len = %x", m_file_object.offset_req, m_rx_image_buffer_len, m_ble_its_max_data_len);
+/**@snippet [Handling the data received over UART] */
 
-        err_code = ble_its_send_buffer(&m_its, m_rx_image_buffer, m_rx_image_buffer_len, m_ble_its_max_data_len);
-        APP_ERROR_CHECK(err_code);
-//        NRF_LOG_HEXDUMP_INFO(m_rx_image_buffer, 0x200);
-
-        nrf_delay_ms(10);
-
-        // serial_uart_response(PAYLOAD_FILE_OPCODE_DATA_REQ);
-
-        m_rx_image_buffer_len = 0;
-}
-
-static uint32_t decode_received_data_handle(serial_payload_file_cmd_t cmd, uint8_t *data, uint16_t len)
-{
-
-        uint32_t err_code;
-        switch (cmd)
-        {
-        case PAYLOAD_FILE_OPCODE_FILEINFO_RSP:
-                //m_file_object.filesize = 0;
-                // m_file_object.filesize = (uint32_t)*data;;
-                m_file_object.filesize = *data;
-                m_file_object.filesize += *(data+1) << 8;
-                m_file_object.filesize += *(data+2) << 16;
-                m_file_object.filesize += *(data+3) << 24;
-                m_file_object.offset_req = 0;
-
-                // m_file_object.filesize  = data[1] + (data[2] << 8) + (data[3] << 16) + (data[4] << 24);
-                NRF_LOG_INFO("File Size = %04x", m_file_object.filesize);
-
-                ble_its_img_info_t image_info;
-                image_info.file_size_bytes = m_file_object.filesize;
-                ble_its_img_info_send(&m_its, &image_info);
-
-                data += 4;      // shift the crc32
-                // m_file_object.crc32 = (uint32_t)*data;
-                m_file_object.crc32 = *data;
-                m_file_object.crc32 += *(data+1) << 8;
-                m_file_object.crc32 += *(data+2) << 16;
-                m_file_object.crc32 += *(data+3) << 24;
-
-                NRF_LOG_INFO("CRC32  = %04x", m_file_object.crc32);
-
-                m_file_object.offset_req = 0;
-
-                serial_uart_response(PAYLOAD_FILE_OPCODE_DATA_REQ);
-                break;
-
-        case PAYLOAD_FILE_OPCODE_DATA_RSP:
-        {
-                NRF_LOG_INFO("PAYLOAD_FILE_OPCODE_DATA_RSP %x, %x, %x", m_file_object.offset_req, m_rx_image_buffer_len, len);
-                //NRF_LOG_HEXDUMP_INFO(data, len);
-                memcpy(m_rx_image_buffer+m_rx_image_buffer_len, data, len);
-                m_rx_image_buffer_len = m_rx_image_buffer_len + len;
-                // if (m_rx_image_buffer_len == 0x0a)
-        }
-        break;
-        case PAYLOAD_FILE_OPCODE_DATA_RSP_LAST:
-
-                NRF_LOG_INFO("PAYLOAD_FILE_OPCODE_DATA_RSP_LAST %x, %x, %x", m_file_object.offset_req, m_rx_image_buffer_len, len);
-                memcpy(m_rx_image_buffer+m_rx_image_buffer_len, data, len);
-                m_rx_image_buffer_len = m_rx_image_buffer_len + len;
-
-                uint8_t resultData[1];
-                resultData[0] = APP_CMD_SEND_BUFFER_REQ;
-                m_its.data_handler(&m_its, resultData, 1);
-
-                //NRF_LOG_HEXDUMP_INFO(data, len);
-                // if (m_rx_image_buffer_len == 0x0a)
-                // if (m_file_is_sending == false)
-                // {
-
-                // }
-                break;
-        default:
-                break;
-        }
-}
-
-
-
-static void serial_uart_response(serial_payload_file_cmd_t cmd)
-{
-        uint8_t tx_buffer[16];
-        uint16_t tx_buffer_len = 0;
-        ret_code_t err_code;
-        NRF_LOG_DEBUG("serial_uart_response %x", cmd);
-
-        switch (cmd)
-        {
-        case PAYLOAD_FILE_OPCODE_PING:
-                tx_buffer_len = 3;
-                tx_buffer[0] =  tx_buffer_len;
-                tx_buffer[1] =  PAYLOAD_FILE_OPCODE_PING;
-                tx_buffer[2] =  m_ble_mtu_length;
-                err_code = nrf_drv_uart_tx(&m_uart, tx_buffer, tx_buffer_len);
-                APP_ERROR_CHECK(err_code);
-                break;
-
-        case PAYLOAD_FILE_OPCODE_MTU_REQ:
-                tx_buffer_len = 3;
-                tx_buffer[0] =  tx_buffer_len;
-                tx_buffer[1] =  PAYLOAD_FILE_OPCODE_MTU_REQ;
-                tx_buffer[2] =  m_ble_mtu_length;
-                err_code = nrf_drv_uart_tx(&m_uart, tx_buffer, tx_buffer_len);
-                APP_ERROR_CHECK(err_code);
-                NRF_LOG_HEXDUMP_INFO(tx_buffer, tx_buffer_len);
-                break;
-
-        case PAYLOAD_FILE_OPCODE_DATA_REQ:
-                m_data_request_obj.payload_len = 10;
-                m_data_request_obj.opcode = PAYLOAD_FILE_OPCODE_DATA_REQ;
-                m_data_request_obj.offset_addr = m_file_object.offset_req;
-                if (m_file_object.filesize > m_data_request_obj.offset_addr + IMAGE_BUFFER_SIZE)
-                {
-                        m_data_request_obj.request_len = IMAGE_BUFFER_SIZE;
-                }
-                else
-                {
-                        m_data_request_obj.request_len = m_file_object.filesize - m_file_object.offset_req;
-                }
-                err_code = nrf_drv_uart_tx(&m_uart, (uint8_t *)&m_data_request_obj, sizeof(m_data_request_obj));
-                APP_ERROR_CHECK(err_code);
-                NRF_LOG_HEXDUMP_DEBUG(&m_data_request_obj, sizeof(m_data_request_obj));
-                m_file_object.offset_req += m_data_request_obj.request_len;
-                break;
-        default:
-                break;
-
-        }
-
-}
-
-static void serial_uart_event_handler(nrf_drv_uart_event_t * p_event, void * p_context)
-{
-        static uint8_t data_array[BLE_NUS_MAX_DATA_LEN];
-        static uint8_t index = 0;
-        static uint8_t total_len;
-        static uint8_t is_first_byte = 1;
-        static uint8_t is_end_byte = 0;
-        serial_payload_file_cmd_t op_code;
-        uint32_t err_code = NRF_SUCCESS;
-
-        switch (p_event->type)
-        {
-        case NRF_DRV_UART_EVT_RX_DONE:
-                //memcpy(data_array, p_event->data.rxtx.p_data, p_event->data.rxtx.bytes);
-                // NRF_LOG_DUMPHEX_INFO(p_event->data.rxtx.p_data, p_event->data.rxtx.bytes);
-                NRF_LOG_DEBUG("data %02x, len %02d", p_event->data.rxtx.p_data[0], p_event->data.rxtx.bytes);
-                if (is_first_byte == 1)
-                {
-                        // op_code = p_event->data.rxtx.p_data[0];
-                        total_len = p_event->data.rxtx.p_data[0];
-                        is_first_byte = 0;
-                        index++;
-                        err_code = nrf_drv_uart_rx(&m_uart, m_rx_byte, total_len);
-                        // err_code = nrf_drv_uart_rx(&m_uart, m_rx_byte, total_len-1);
-                        APP_ERROR_CHECK(err_code);
-                }
-                else
-                {
-                        op_code = p_event->data.rxtx.p_data[0];
-                        memcpy(data_array,  p_event->data.rxtx.p_data+1, p_event->data.rxtx.bytes-1);
-                        // index += p_event->data.rxtx.bytes;
-                        err_code = nrf_drv_uart_rx(&m_uart, m_rx_byte, 1);
-                        // NRF_LOG_INFO("index = %d", index);
-                        //NRF_LOG_HEXDUMP_INFO(data_array, p_event->data.rxtx.bytes-1);
-                        index = 0;
-                        is_end_byte = 1;
-                }
-                if (is_end_byte)
-                {
-                        decode_received_data_handle(op_code, data_array, total_len-1);
-                        is_end_byte = 0;
-                        is_first_byte = 1;
-                }
-                break;
-
-        case NRF_DRV_UART_EVT_ERROR:
-                APP_ERROR_HANDLER(p_event->data.error.error_mask);
-                break;
-
-        default:
-                // No action.
-                break;
-        }
-}
-
-
-static uint32_t serial_file_transport_init(void)
-{
-
-        uint32_t err_code = NRF_SUCCESS;
-        nrf_drv_uart_config_t uart_config = NRF_DRV_UART_DEFAULT_CONFIG;
-        NRF_LOG_DEBUG("serial_file_transport_init()");
-        uart_config.pseltxd   = TX_PIN_NUMBER;
-        uart_config.pselrxd   = RX_PIN_NUMBER;
-        uart_config.pselcts   = CTS_PIN_NUMBER;
-        uart_config.pselrts   = RTS_PIN_NUMBER;
-        uart_config.hwfc      = false ?
-                                NRF_UART_HWFC_ENABLED : NRF_UART_HWFC_DISABLED;
-        uart_config.p_context = NULL;
-
-        err_code =  nrf_drv_uart_init(&m_uart, &uart_config, serial_uart_event_handler);
-        if (err_code != NRF_SUCCESS)
-        {
-                NRF_LOG_ERROR("Failed initializing uart");
-                return err_code;
-        }
-        err_code = nrf_drv_uart_rx(&m_uart, m_rx_byte, 1);
-        if (err_code != NRF_SUCCESS)
-        {
-                NRF_LOG_ERROR("Failed initializing rx");
-        }
-        m_active = true;
-
-        return err_code;
-}
-
-
-static uint32_t serial_file_transport_close(void)
-{
-        if (m_active == true)
-        {
-                nrf_drv_uart_uninit(&m_uart);
-                m_active = false;
-        }
-        return NRF_SUCCESS;
-}
+// uint32_t transfer_serial_uart_init(void)
+// {
+//         uint32_t err_code = NRF_SUCCESS;
+//
+//         if (m_active)
+//         {
+//                 return err_code;
+//         }
+//         m_active = true;
+//
+//         NRF_LOG_DEBUG("serial_transport_init()");
+//
+// //        err_code = nrf_balloc_init(&m_payload_pool);
+// //        APP_ERROR_CHECK(err_code);
+//
+//         // m_serial.rsp_func           = rsp_send;
+//         // m_serial.payload_free_func  = payload_free;
+//         // m_serial.mtu                = UART_SLIP_MTU;
+//         // m_serial.p_rsp_buf          = &m_rsp_buf[NRF_MAX_RESPONSE_SIZE_SLIP -
+//         //                                          NRF_SERIAL_MAX_RESPONSE_SIZE];
+//
+//         nrf_drv_uart_config_t uart_config = NRF_DRV_UART_DEFAULT_CONFIG;
+//
+//         uart_config.pseltxd   = TX_PIN_NUMBER;
+//         uart_config.pselrxd   = RX_PIN_NUMBER;
+//         uart_config.pselcts   = CTS_PIN_NUMBER;
+//         uart_config.pselrts   = RTS_PIN_NUMBER;
+//         uart_config.hwfc      = NRF_SERIAL_UART_USES_HWFC ?
+//                                 NRF_UART_HWFC_ENABLED : NRF_UART_HWFC_DISABLED;
+//         // uart_config.p_context = &m_serial;
+//
+//         err_code =  nrf_drv_uart_init(&m_uart, &uart_config, uart_event_handler);
+//         if (err_code != NRF_SUCCESS)
+//         {
+//                 NRF_LOG_ERROR("Failed initializing uart");
+//                 return err_code;
+//         }
+//
+//         err_code = nrf_drv_uart_rx(&m_uart, &m_rx_byte, 1);
+//         if (err_code != NRF_SUCCESS)
+//         {
+//                 NRF_LOG_ERROR("Failed initializing rx");
+//         }
+//         return err_code;
+//
+// }
+//
+// uint32_t transfer_serial_uart_close(void)
+// {
+//         if ((m_active == true))
+//         {
+//                 nrf_drv_uart_uninit(&m_uart);
+//                 m_active = false;
+//         }
+//
+//         return NRF_SUCCESS;
+// }
 
 /**@brief Function for application main entry.
  */
@@ -1228,7 +1188,7 @@ int main(void)
 
         // Initialize.
         log_init();
-        // uart_init();
+        uart_init();
         leds_init();
         timers_init();
         buttons_init();
@@ -1240,19 +1200,13 @@ int main(void)
         services_init();
         advertising_init();
         conn_params_init();
-
-        // file_transfer_configure();
-        // file_transfer_
-
+        create_circular_buffer();
         // Start execution.
-        NRF_LOG_INFO("Peripheral JPG Transfer + NUS.");
+        NRF_LOG_INFO("Channel Map Update Example : Peripheral JPG Transfer + NUS.");
         advertising_start();
 
         err_code = app_button_enable();
         APP_ERROR_CHECK(err_code);
-
-        serial_file_transport_init();
-
 
 
         // Enter main loop.

@@ -1,30 +1,30 @@
 /**
  * Copyright (c) 2012 - 2017, Nordic Semiconductor ASA
- * 
+ *
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
- * 
+ *
  * 1. Redistributions of source code must retain the above copyright notice, this
  *    list of conditions and the following disclaimer.
- * 
+ *
  * 2. Redistributions in binary form, except as embedded into a Nordic
  *    Semiconductor ASA integrated circuit in a product or a software update for
  *    such product, must reproduce the above copyright notice, this list of
  *    conditions and the following disclaimer in the documentation and/or other
  *    materials provided with the distribution.
- * 
+ *
  * 3. Neither the name of Nordic Semiconductor ASA nor the names of its
  *    contributors may be used to endorse or promote products derived from this
  *    software without specific prior written permission.
- * 
+ *
  * 4. This software, with or without modification, must only be used with a
  *    Nordic Semiconductor ASA integrated circuit.
- * 
+ *
  * 5. Any software provided in binary form under this license must not be reverse
  *    engineered, decompiled, modified and/or disassembled.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY NORDIC SEMICONDUCTOR ASA "AS IS" AND ANY EXPRESS
  * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
  * OF MERCHANTABILITY, NONINFRINGEMENT, AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -35,7 +35,7 @@
  * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
  * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- * 
+ *
  */
 /**@file
  *
@@ -77,17 +77,17 @@ extern "C" {
  * @hideinitializer
  */
 #define BLE_ITS_DEF(_name, _its_max_clients)                      \
-    BLE_LINK_CTX_MANAGER_DEF(CONCAT_2(_name, _link_ctx_storage),  \
-                             (_its_max_clients),                  \
-                             sizeof(ble_its_client_context_t));   \
-    static ble_its_t _name = {0, 0, {0,0,0,0},{0,0,0,0},{0,0,0,0}, \
-                              0, 0, 0,                            \
-                              &CONCAT_2(_name, _link_ctx_storage)}; \
-    NRF_SDH_BLE_OBSERVER(_name ## _obs,                           \
-                         BLE_ITS_BLE_OBSERVER_PRIO,               \
-                         ble_its_on_ble_evt,                      \
-                         &_name)
-    
+        BLE_LINK_CTX_MANAGER_DEF(CONCAT_2(_name, _link_ctx_storage),  \
+                                 (_its_max_clients),                  \
+                                 sizeof(ble_its_client_context_t));   \
+        static ble_its_t _name = {0, 0, {0,0,0,0},{0,0,0,0},{0,0,0,0}, \
+                                  0, 0, 0,                            \
+                                  &CONCAT_2(_name, _link_ctx_storage)}; \
+        NRF_SDH_BLE_OBSERVER(_name ## _obs,                           \
+                             BLE_ITS_BLE_OBSERVER_PRIO,               \
+                             ble_its_on_ble_evt,                      \
+                             &_name)
+
 #define BLE_UUID_ITS_SERVICE 0x0001                      /**< The UUID of the Nordic UART Service. */
 
 #define OPCODE_LENGTH 1
@@ -119,7 +119,7 @@ typedef void (*ble_its_data_handler_t) (ble_its_t * p_its, uint8_t const * p_dat
  */
 typedef struct
 {
-    bool is_notification_enabled; /**< Variable to indicate if the peer has enabled notification of the RX characteristic.*/
+        bool is_notification_enabled; /**< Variable to indicate if the peer has enabled notification of the RX characteristic.*/
 } ble_its_client_context_t;
 
 /**@brief Nordic UART Service initialization structure.
@@ -130,7 +130,7 @@ typedef struct
  */
 typedef struct
 {
-    ble_its_data_handler_t data_handler; /**< Event handler to be called for handling received data. */
+        ble_its_data_handler_t data_handler; /**< Event handler to be called for handling received data. */
 } ble_its_init_t;
 
 /**@brief Nordic UART Service structure.
@@ -139,31 +139,44 @@ typedef struct
  */
 struct ble_its_s
 {
-    uint8_t                  uuid_type;               /**< UUID type for Nordic UART Service Base UUID. */
-    uint16_t                 service_handle;          /**< Handle of Nordic UART Service (as provided by the SoftDevice). */
-    ble_gatts_char_handles_t tx_handles;              /**< Handles related to the TX characteristic (as provided by the SoftDevice). */
-    ble_gatts_char_handles_t rx_handles;              /**< Handles related to the RX characteristic (as provided by the SoftDevice). */
-    ble_gatts_char_handles_t img_info_handles;      
-    uint16_t                 conn_handle;             /**< Handle of the current connection (as provided by the SoftDevice). BLE_CONN_HANDLE_INVALID if not in a connection. */
-    bool                     is_notification_enabled; /**< Variable to indicate if the peer has enabled notification of the RX characteristic.*/
-    bool                     is_info_char_notification_enabled;
-    blcm_link_ctx_storage_t * const p_link_ctx_storage;
-    ble_its_data_handler_t   data_handler;            /**< Event handler to be called for handling received data. */
+        uint8_t uuid_type;                            /**< UUID type for Nordic UART Service Base UUID. */
+        uint16_t service_handle;                      /**< Handle of Nordic UART Service (as provided by the SoftDevice). */
+        ble_gatts_char_handles_t tx_handles;          /**< Handles related to the TX characteristic (as provided by the SoftDevice). */
+        ble_gatts_char_handles_t rx_handles;          /**< Handles related to the RX characteristic (as provided by the SoftDevice). */
+        ble_gatts_char_handles_t img_info_handles;
+        uint16_t conn_handle;                         /**< Handle of the current connection (as provided by the SoftDevice). BLE_CONN_HANDLE_INVALID if not in a connection. */
+        bool is_notification_enabled;                 /**< Variable to indicate if the peer has enabled notification of the RX characteristic.*/
+        bool is_info_char_notification_enabled;
+        blcm_link_ctx_storage_t * const p_link_ctx_storage;
+        ble_its_data_handler_t data_handler;          /**< Event handler to be called for handling received data. */
+};
+
+
+enum {
+        APP_CMD_NOCOMMAND = 0,
+        APP_CMD_SINGLE_CAPTURE,
+        APP_CMD_START_STREAM,
+        APP_CMD_STOP_STREAM,
+        APP_CMD_CHANGE_RESOLUTION,
+        APP_CMD_CHANGE_PHY,
+        APP_CMD_SEND_BLE_PARAMS,
+        APP_CMD_SEND_BUFFER_REQ,
+        APP_CMD_SEND_BUFFER_COMPLETE,
 };
 
 typedef struct
 {
-    uint32_t file_size_bytes;
-    
+        uint32_t file_size_bytes;
+//    uint32_t crc32;
 }ble_its_img_info_t;
 
 typedef PACKED_STRUCT
 {
-    uint16_t mtu;
-    uint16_t con_interval;
-    uint8_t  tx_phy;
-    uint8_t  rx_phy;
-}ble_its_ble_params_info_t;
+        uint16_t mtu;
+        uint16_t con_interval;
+        uint8_t tx_phy;
+        uint8_t rx_phy;
+} ble_its_ble_params_info_t;
 
 /**@brief Function for initializing the Nordic UART Service.
  *
@@ -209,6 +222,8 @@ uint32_t ble_its_img_info_send(ble_its_t * p_its, ble_its_img_info_t * img_info)
 uint32_t ble_its_send_file(ble_its_t * p_its, uint8_t * p_data, uint32_t data_length, uint32_t max_packet_length);
 
 uint32_t ble_its_send_file_fragment(ble_its_t * p_its, uint8_t * p_data, uint32_t data_length);
+
+uint32_t ble_its_send_buffer(ble_its_t * p_its, uint8_t * p_data, uint32_t data_length, uint32_t max_packet_length);
 
 bool ble_its_file_transfer_busy(void);
 
