@@ -125,9 +125,6 @@
       Name="Release"
       gcc_debugging_level="Level 3"
       gcc_optimization_level="None" />
-    <folder Name="module">
-      <file file_name="../../../../module/nrf_serial_uart_transfer.c" />
-    </folder>
   </project>
   <configuration
     Name="Release"

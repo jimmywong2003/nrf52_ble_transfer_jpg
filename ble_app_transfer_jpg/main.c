@@ -74,7 +74,7 @@
 #include "nrf_log_ctrl.h"
 #include "nrf_log_default_backends.h"
 
-#include "test_image.h"
+//#include "test_image.h"
 
 #if defined (UART_PRESENT)
 #include "nrf_uart.h"
@@ -591,15 +591,6 @@ static void uart_init(void)
 /**@snippet [UART Initialization] */
 
 
-void its_data_file_test(void * p_event_data, uint16_t size)
-{
-        uint32_t err_code;
-        NRF_LOG_INFO("_actest_image %04d", sizeof(_actest_image));
-        err_code = ble_its_send_file(&m_its, _actest_image, sizeof(_actest_image), m_ble_its_max_data_len);
-        APP_ERROR_CHECK(err_code);
-}
-
-
 static void its_data_handler(ble_its_t * p_its, uint8_t const * p_data, uint16_t length)
 {
 
@@ -646,8 +637,7 @@ static void its_data_handler(ble_its_t * p_its, uint8_t const * p_data, uint16_t
 
         case APP_CMD_SEND_BUFFER_COMPLETE:
                 NRF_LOG_INFO("APP_CMD_SEND_BUFFER_COMPLETE");
-                // err_code = app_sched_event_put(NULL, 0, transfer_image_buffer);
-                // APP_ERROR_CHECK(err_code);
+
                 if (m_file_is_sending == true)
                         if (m_file_object.offset_req != m_file_object.filesize)
                                 serial_uart_response(PAYLOAD_FILE_OPCODE_DATA_REQ);
@@ -914,11 +904,6 @@ static void button_event_handler(uint8_t pin_no, uint8_t button_action)
         {
 
         case LEDBUTTON_BUTTON_1:
-                if (button_action == APP_BUTTON_PUSH)
-                {
-                        serial_uart_response(PAYLOAD_FILE_OPCODE_DATA_REQ);
-                }
-                printf("Testing 1");
                 break;
 
 
@@ -985,11 +970,9 @@ static void transfer_image_buffer(void * p_event_data, uint16_t size)
 
         err_code = ble_its_send_buffer(&m_its, m_rx_image_buffer, m_rx_image_buffer_len, m_ble_its_max_data_len);
         APP_ERROR_CHECK(err_code);
-//        NRF_LOG_HEXDUMP_INFO(m_rx_image_buffer, 0x200);
+
 
         nrf_delay_ms(10);
-
-        // serial_uart_response(PAYLOAD_FILE_OPCODE_DATA_REQ);
 
         m_rx_image_buffer_len = 0;
 }
@@ -1001,8 +984,6 @@ static uint32_t decode_received_data_handle(serial_payload_file_cmd_t cmd, uint8
         switch (cmd)
         {
         case PAYLOAD_FILE_OPCODE_FILEINFO_RSP:
-                //m_file_object.filesize = 0;
-                // m_file_object.filesize = (uint32_t)*data;;
                 m_file_object.filesize = *data;
                 m_file_object.filesize += *(data+1) << 8;
                 m_file_object.filesize += *(data+2) << 16;
@@ -1017,7 +998,6 @@ static uint32_t decode_received_data_handle(serial_payload_file_cmd_t cmd, uint8
                 ble_its_img_info_send(&m_its, &image_info);
 
                 data += 4;      // shift the crc32
-                // m_file_object.crc32 = (uint32_t)*data;
                 m_file_object.crc32 = *data;
                 m_file_object.crc32 += *(data+1) << 8;
                 m_file_object.crc32 += *(data+2) << 16;
@@ -1033,10 +1013,10 @@ static uint32_t decode_received_data_handle(serial_payload_file_cmd_t cmd, uint8
         case PAYLOAD_FILE_OPCODE_DATA_RSP:
         {
                 NRF_LOG_INFO("PAYLOAD_FILE_OPCODE_DATA_RSP %x, %x, %x", m_file_object.offset_req, m_rx_image_buffer_len, len);
-                //NRF_LOG_HEXDUMP_INFO(data, len);
+
                 memcpy(m_rx_image_buffer+m_rx_image_buffer_len, data, len);
                 m_rx_image_buffer_len = m_rx_image_buffer_len + len;
-                // if (m_rx_image_buffer_len == 0x0a)
+
         }
         break;
         case PAYLOAD_FILE_OPCODE_DATA_RSP_LAST:
@@ -1049,12 +1029,6 @@ static uint32_t decode_received_data_handle(serial_payload_file_cmd_t cmd, uint8
                 resultData[0] = APP_CMD_SEND_BUFFER_REQ;
                 m_its.data_handler(&m_its, resultData, 1);
 
-                //NRF_LOG_HEXDUMP_INFO(data, len);
-                // if (m_rx_image_buffer_len == 0x0a)
-                // if (m_file_is_sending == false)
-                // {
-
-                // }
                 break;
         default:
                 break;
@@ -1128,27 +1102,24 @@ static void serial_uart_event_handler(nrf_drv_uart_event_t * p_event, void * p_c
         switch (p_event->type)
         {
         case NRF_DRV_UART_EVT_RX_DONE:
-                //memcpy(data_array, p_event->data.rxtx.p_data, p_event->data.rxtx.bytes);
-                // NRF_LOG_DUMPHEX_INFO(p_event->data.rxtx.p_data, p_event->data.rxtx.bytes);
+
+
                 NRF_LOG_DEBUG("data %02x, len %02d", p_event->data.rxtx.p_data[0], p_event->data.rxtx.bytes);
                 if (is_first_byte == 1)
                 {
-                        // op_code = p_event->data.rxtx.p_data[0];
                         total_len = p_event->data.rxtx.p_data[0];
                         is_first_byte = 0;
                         index++;
                         err_code = nrf_drv_uart_rx(&m_uart, m_rx_byte, total_len);
-                        // err_code = nrf_drv_uart_rx(&m_uart, m_rx_byte, total_len-1);
                         APP_ERROR_CHECK(err_code);
                 }
                 else
                 {
                         op_code = p_event->data.rxtx.p_data[0];
                         memcpy(data_array,  p_event->data.rxtx.p_data+1, p_event->data.rxtx.bytes-1);
-                        // index += p_event->data.rxtx.bytes;
+
                         err_code = nrf_drv_uart_rx(&m_uart, m_rx_byte, 1);
-                        // NRF_LOG_INFO("index = %d", index);
-                        //NRF_LOG_HEXDUMP_INFO(data_array, p_event->data.rxtx.bytes-1);
+
                         index = 0;
                         is_end_byte = 1;
                 }
@@ -1240,9 +1211,6 @@ int main(void)
         services_init();
         advertising_init();
         conn_params_init();
-
-        // file_transfer_configure();
-        // file_transfer_
 
         // Start execution.
         NRF_LOG_INFO("Peripheral JPG Transfer + NUS.");
