@@ -1,4 +1,4 @@
-# NRF52 Series for BLE JPG File transfer Example
+# NRF52 Series for BLE IMAGE (JPG) File Transfer Example
 
 How to transfer a large file through BLE is a frequency ask question and hot topic.   In this example, it would show to get the image file from PC through UART and then transfer to the Mobile.
 
@@ -20,10 +20,10 @@ The idea is to retrieve a sector of data (such as 2KB) from UART first and then 
 
 
 # Requirements
-------------
+-----------------------------------------
 - nRF5 SDK version 15.3.0
-- Softdevice S140v6.1.1
-- nRF52840 DK 
+- Softdevice S140v6.1.1 / Softdevice S112v6.1.1
+- nRF52840 DK / nRF52810 
 - Segger Embedded Studio IDE (SES) Project
 - Python 3.7.x with pyserial module
 
