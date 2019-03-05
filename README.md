@@ -14,8 +14,7 @@ Also, I re-used the Android APK (https://github.com/NordicPlayground/Android-Ima
 
 In order to optimize the data throughput transfer, I add the flow control as below message.
 
-![Image of flow control]
-(https://github.com/jimmywong2003/nrf52_ble_transfer_jpg/blob/master/picture/flow_control_on_uart.png)
+![Image of flow control](https://github.com/jimmywong2003/nrf52_ble_transfer_jpg/blob/master/picture/flow_control_on_uart.png)
 
 The idea is to retrieve a sector of data (such as 2KB) from UART first and then send through BLE.
 
