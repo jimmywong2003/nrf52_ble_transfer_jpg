@@ -4,7 +4,7 @@ How to transfer a large file through BLE is a frequency ask question and hot top
 
 ## Block diagram
 
-![Image of block diagram](https://github.com/jimmywong2003/nrf52_ble_transfer_jpg/blob/master/Block_Diagram_on_JPEG_Transfer.png)
+![Image of block diagram](https://github.com/jimmywong2003/nrf52_ble_transfer_jpg/blob/master/picture/Block_Diagram_on_JPEG_Transfer.png)
 
 Based on the example (https://github.com/NordicPlayground/nrf52-ble-image-transfer-demo), I add the python script to load the image through UART and add the flow control in order to optimize the data transfer speed.
 
@@ -14,7 +14,7 @@ Also, I re-used the Android APK (https://github.com/NordicPlayground/Android-Ima
 
 In order to optimize the data throughput transfer, I add the flow control as below message.
 
-![Image of flow control](https://github.com/jimmywong2003/nrf52_ble_transfer_jpg/blob/master/flow_control_on_uart.png)
+![Image of flow control](https://github.com/jimmywong2003/nrf52_ble_transfer_jpg/blob/master/picture/flow_control_on_uart.png)
 
 The idea is to retrieve a sector of data (such as 2KB) from UART first and then send through BLE.
 
