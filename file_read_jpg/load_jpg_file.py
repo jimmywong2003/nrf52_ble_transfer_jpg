@@ -80,7 +80,7 @@ def main():
 
     # Open the Serial Port
     try:
-        ser = serial.Serial('COM7', 115200, timeout=30)
+        ser = serial.Serial('COM43', 115200, timeout=30)
     except:
         print ("Please check to open the correct com port!!")
         sys.exit(0)
@@ -132,7 +132,7 @@ def main():
         data_request = ser.read(8)
         print (data_request)
         (payload_len, opcode, request_length, offset_addr) = struct.unpack('BsHL', data_request)
-        print (payload_len, opcode, request_length, offset_addr)
+        print (payload_len, opcode, "request length = ", request_length, "offset address = ", offset_addr)
 
         if ((opcode == PAYLOAD_JPG_OPCODE_DATA_REQ) or (opcode == PAYLOAD_JPG_OPCODE_DATA_RSP_LAST)):
             print ("OPCODE ", opcode)
@@ -157,14 +157,14 @@ def main():
                 length = mtu_len
 
             binary_file.seek(offset_addr+data_index, 0)
-            print (offset_addr, data_index, length, filesize)
+            print ("offset_addr: ", offset_addr, "data_index ", data_index, "length ", length, "filesize ", filesize)
             payload_len = length + 1
             ser.write(struct.pack("B", payload_len))
             if (data_index+length >= request_length):
-                print ("PAYLOAD_JPG_OPCODE_DATA_RSP_LAST", offset_addr, data_index, length)
+                print ("PAYLOAD_JPG_OPCODE_DATA_RSP_LAST: offset_addr", offset_addr, "data_index ",  data_index, "length ", length)
                 ser.write(PAYLOAD_JPG_OPCODE_DATA_RSP_LAST)
             else:
-                print ("PAYLOAD_JPG_OPCODE_DATA_RSP", offset_addr, data_index, length)
+                print ("PAYLOAD_JPG_OPCODE_DATA_RSP : offset_addr", offset_addr, "data_index ", data_index, "length",  length)
                 ser.write(PAYLOAD_JPG_OPCODE_DATA_RSP)
             ser.write(binary_file.read(length))
             # time.sleep(10)

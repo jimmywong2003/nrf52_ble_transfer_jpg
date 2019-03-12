@@ -291,7 +291,7 @@ static void battery_level_meas_timeout_handler(void * p_context)
 {
         UNUSED_PARAMETER(p_context);
         //serial_uart_response(PAYLOAD_FILE_OPCODE_PING);
-        NRF_LOG_INFO("Time count = %d", time_count);
+        NRF_LOG_DEBUG("Time count = %d", time_count);
         time_count++;
 }
 
@@ -786,7 +786,6 @@ static void ble_evt_handler(ble_evt_t const * p_ble_evt, void * p_context)
                 break;
         case BLE_GAP_EVT_CONN_PARAM_UPDATE:
         {
-//            m_conn_interval_configured = true;
                 ble_gap_evt_t const * p_gap_evt = &p_ble_evt->evt.gap_evt;
                 NRF_LOG_INFO("Connection interval updated: 0x%x, 0x%x.",
                              p_gap_evt->params.conn_param_update.conn_params.min_conn_interval,
@@ -959,28 +958,24 @@ static void idle_state_handle(void)
 {
         app_sched_execute();
         while(NRF_LOG_PROCESS());
-        //UNUSED_RETURN_VALUE(NRF_LOG_PROCESS());
         nrf_pwr_mgmt_run();
 }
 
 static void transfer_image_buffer(void * p_event_data, uint16_t size)
 {
         uint32_t err_code;
-        NRF_LOG_INFO("transfer_image_buffer offset %04x m_rx_image_buffer_len = %04x m_ble_its_max_data_len = %x", m_file_object.offset_req, m_rx_image_buffer_len, m_ble_its_max_data_len);
 
+        NRF_LOG_DEBUG("transfer_image_buffer offset %04x m_rx_image_buffer_len = %04x m_ble_its_max_data_len = %x", m_file_object.offset_req, m_rx_image_buffer_len, m_ble_its_max_data_len);
         err_code = ble_its_send_buffer(&m_its, m_rx_image_buffer, m_rx_image_buffer_len, m_ble_its_max_data_len);
         APP_ERROR_CHECK(err_code);
-
-
         nrf_delay_ms(10);
-
         m_rx_image_buffer_len = 0;
 }
 
 static uint32_t decode_received_data_handle(serial_payload_file_cmd_t cmd, uint8_t *data, uint16_t len)
 {
 
-        uint32_t err_code;
+        uint32_t err_code = NRF_SUCCESS;
         switch (cmd)
         {
         case PAYLOAD_FILE_OPCODE_FILEINFO_RSP:
@@ -1012,27 +1007,42 @@ static uint32_t decode_received_data_handle(serial_payload_file_cmd_t cmd, uint8
 
         case PAYLOAD_FILE_OPCODE_DATA_RSP:
         {
-                NRF_LOG_INFO("PAYLOAD_FILE_OPCODE_DATA_RSP %x, %x, %x", m_file_object.offset_req, m_rx_image_buffer_len, len);
-
+                NRF_LOG_DEBUG("PAYLOAD_FILE_OPCODE_DATA_RSP %x, %x, %x", m_file_object.offset_req, m_rx_image_buffer_len, len);
+                if (m_rx_image_buffer_len > IMAGE_BUFFER_SIZE)
+                {
+                    err_code = NRF_ERROR_DATA_SIZE;
+                    APP_ERROR_CHECK(err_code);
+                }
                 memcpy(m_rx_image_buffer+m_rx_image_buffer_len, data, len);
                 m_rx_image_buffer_len = m_rx_image_buffer_len + len;
 
         }
         break;
+
         case PAYLOAD_FILE_OPCODE_DATA_RSP_LAST:
 
-                NRF_LOG_INFO("PAYLOAD_FILE_OPCODE_DATA_RSP_LAST %x, %x, %x", m_file_object.offset_req, m_rx_image_buffer_len, len);
+                NRF_LOG_DEBUG("PAYLOAD_FILE_OPCODE_DATA_RSP_LAST %x, %x, %x", m_file_object.offset_req, m_rx_image_buffer_len, len);
+                if (m_rx_image_buffer_len > IMAGE_BUFFER_SIZE)
+                {
+                    err_code = NRF_ERROR_DATA_SIZE;
+                    APP_ERROR_CHECK(err_code);
+                }
+
                 memcpy(m_rx_image_buffer+m_rx_image_buffer_len, data, len);
                 m_rx_image_buffer_len = m_rx_image_buffer_len + len;
-
+                
+                // send the notification 
                 uint8_t resultData[1];
                 resultData[0] = APP_CMD_SEND_BUFFER_REQ;
                 m_its.data_handler(&m_its, resultData, 1);
 
                 break;
+
         default:
                 break;
         }
+
+        return err_code;
 }
 
 
@@ -1077,6 +1087,7 @@ static void serial_uart_response(serial_payload_file_cmd_t cmd)
                 {
                         m_data_request_obj.request_len = m_file_object.filesize - m_file_object.offset_req;
                 }
+                NRF_LOG_DEBUG("PAYLOAD_FILE_OPCODE_DATA_REQ offset_addr= %x, %x", m_data_request_obj.offset_addr, m_data_request_obj.request_len);
                 err_code = nrf_drv_uart_tx(&m_uart, (uint8_t *)&m_data_request_obj, sizeof(m_data_request_obj));
                 APP_ERROR_CHECK(err_code);
                 NRF_LOG_HEXDUMP_DEBUG(&m_data_request_obj, sizeof(m_data_request_obj));
@@ -1220,8 +1231,6 @@ int main(void)
         APP_ERROR_CHECK(err_code);
 
         serial_file_transport_init();
-
-
 
         // Enter main loop.
         for (;;)

@@ -65,6 +65,8 @@ volatile uint32_t file_size = 0, file_pos = 0, m_max_data_length = 20;
 uint8_t * file_data;
 ble_its_t * m_its;
 
+static uint16_t u_num_packet_per_sending_block = 0;
+static bool check_tx_complete_flag = false;
 static bool debug_flag = false;
 
 #define ITS_ENABLE_PIN_DEBUGGING 1
@@ -412,24 +414,28 @@ void ble_its_on_ble_evt(ble_evt_t const * p_ble_evt, void * p_context)
                 {
                         push_data_packets();
                 }
-                // else
-                // {
-                //         p_its->data_handler(p_its, resultData, 1);
-                // }
+
                 ITS_DEBUG_PIN_CLR(2);
                 nrf_error_resources = false;
 
                 if (debug_flag)
                         NRF_LOG_INFO("file_size %x, file_pos %x", file_size,file_pos);
 
-                if (file_size == file_pos)
+              
+                if (check_tx_complete_flag)
                 {
-                        uint8_t resultData[1];
-                        resultData[0] = APP_CMD_SEND_BUFFER_COMPLETE;
-                        NRF_LOG_INFO("Send APP_CMD_SEND_BUFFER_COMPLETE");
-                        p_its->data_handler(p_its, resultData, 1);
-                        file_size = 0;
-                        debug_flag = false;
+                        NRF_LOG_DEBUG(" count = %d, u_TX_count = %d", p_ble_evt->evt.gatts_evt.params.hvn_tx_complete.count, u_num_packet_per_sending_block);
+                        u_num_packet_per_sending_block -= p_ble_evt->evt.gatts_evt.params.hvn_tx_complete.count;
+                        //if (file_size == file_pos)
+                        if (u_num_packet_per_sending_block <=0)
+                        {
+                                uint8_t resultData[1];
+                                resultData[0] = APP_CMD_SEND_BUFFER_COMPLETE;
+                                NRF_LOG_INFO("Send APP_CMD_SEND_BUFFER_COMPLETE");
+                                p_its->data_handler(p_its, resultData, 1);
+                                file_size = 0;
+                                debug_flag = false;
+                        }
                 }
         }
         break;
@@ -501,7 +507,6 @@ uint32_t ble_its_string_send(ble_its_t * p_its, uint8_t * p_string, uint16_t len
 
         VERIFY_PARAM_NOT_NULL(p_its);
 
-
         if ((p_its->conn_handle == BLE_CONN_HANDLE_INVALID) || (!p_its->is_notification_enabled))
         {
                 return NRF_ERROR_INVALID_STATE;
@@ -511,7 +516,6 @@ uint32_t ble_its_string_send(ble_its_t * p_its, uint8_t * p_string, uint16_t len
         {
                 return NRF_ERROR_INVALID_PARAM;
         }
-
 
         memset(&hvx_params, 0, sizeof(hvx_params));
         hvx_params.handle = p_its->tx_handles.value_handle;
@@ -527,7 +531,7 @@ uint32_t ble_its_string_send(ble_its_t * p_its, uint8_t * p_string, uint16_t len
                 ITS_DEBUG_PIN_SET(1);
         }
         ITS_DEBUG_PIN_CLR(0);
-        //NRF_LOG_INFO("NOT - Len: %i, err_code: %i", length, err_code);
+
         return err_code;
 }
 
@@ -610,6 +614,10 @@ uint32_t ble_its_send_file(ble_its_t * p_its, uint8_t * p_data, uint32_t data_le
         m_max_data_length = max_packet_length;
         m_its = p_its;
 
+        check_tx_complete_flag = true;
+        //calculate how many packet per block
+        u_num_packet_per_sending_block = data_length / max_packet_length + 1 + 1;// including one for img info send
+
         err_code = push_data_packets();
         if(err_code == NRF_ERROR_RESOURCES) return NRF_SUCCESS;
         return err_code;
@@ -634,6 +642,12 @@ uint32_t ble_its_send_buffer(ble_its_t * p_its, uint8_t * p_data, uint32_t data_
 
         ble_its_img_info_t image_info;
         image_info.file_size_bytes = data_length;
+
+
+        check_tx_complete_flag = true;
+        //calculate how many packet per block
+        u_num_packet_per_sending_block = data_length / max_packet_length + 1;
+
         // ble_its_img_info_send(p_its, &image_info);
 
         file_size = data_length;
@@ -641,6 +655,8 @@ uint32_t ble_its_send_buffer(ble_its_t * p_its, uint8_t * p_data, uint32_t data_
         file_data = p_data;
         m_max_data_length = max_packet_length;
         m_its = p_its;
+
+        NRF_LOG_INFO("ble_its_send_buffer file_size = %x, file_pos = %x", file_size, file_pos);
 
         err_code = push_data_packets();
         if(err_code == NRF_ERROR_RESOURCES) return NRF_SUCCESS;
