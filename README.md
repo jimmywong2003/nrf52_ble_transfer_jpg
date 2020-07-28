@@ -21,9 +21,9 @@ The idea is to retrieve a sector of data (such as 2KB) from UART first and then 
 
 # Requirements
 -----------------------------------------
-- nRF5 SDK version 15.3.0
-- Softdevice S140v6.1.1 / Softdevice S112v6.1.1
-- nRF52840 DK / nRF52810 
+- nRF5 SDK version 17.0.0
+- Softdevice S113v7.0.1 / Softdevice S112v7.0.1 / Softdevice S140v7.0.1
+- nRF52840 DK / nRF52810 / nRF52833
 - Segger Embedded Studio IDE (SES) Project
 - Python 3.7.x with pyserial module
 
@@ -31,8 +31,6 @@ The idea is to retrieve a sector of data (such as 2KB) from UART first and then 
 
 ## Note
 -----------------------------------------
-The project may need modifications to work with later versions or other boards. 
-To compile it, clone the repository in the /nRF5_SDK_15.3.0/examples/ directory. 
+The project may need modifications to work with later versions or other boards.
+To compile it, clone the repository in the /nRF5_SDK_17.0.0/examples/ directory. 
 The application is built to be used with the official nRF5 SDK that can be downloaded from developer.nordicsemi.com
-
-
