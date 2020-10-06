@@ -16,14 +16,22 @@ In order to optimize the data throughput transfer, I add the flow control as bel
 
 ![Image of flow control](https://github.com/jimmywong2003/nrf52_ble_transfer_jpg/blob/master/picture/flow_control_on_uart.png)
 
-The idea is to retrieve a sector of data (such as 2KB) from UART first and then send through BLE.
+The idea is to retrieve a sector of data (such as 4KB) from UART first and then send through BLE.
 
+### Demo hex
+
+You can find the demo hex for trying at the nRF52832 DK or nRF52840 DK board.
+
+``
+nrfjprog --program combined_app_transfer_jpg_pca10040e.hex --reset --chiperase
+nrfjprog --program combined_app_transfer_jpg_pca10056.hex --reset --chiperase
+``
 
 # Requirements
 -----------------------------------------
-- nRF5 SDK version 15.3.0
-- Softdevice S140v6.1.1 / Softdevice S112v6.1.1
-- nRF52840 DK / nRF52810 
+- nRF5 SDK version 17.0.2
+- Softdevice S140v7.2.0 / Softdevice S113v7.2.0
+- nRF52840 DK / nRF52810
 - Segger Embedded Studio IDE (SES) Project
 - Python 3.7.x with pyserial module
 
@@ -31,8 +39,6 @@ The idea is to retrieve a sector of data (such as 2KB) from UART first and then 
 
 ## Note
 -----------------------------------------
-The project may need modifications to work with later versions or other boards. 
-To compile it, clone the repository in the /nRF5_SDK_15.3.0/examples/ directory. 
+The project may need modifications to work with later versions or other boards.
+To compile it, clone the repository in the /nRF5_SDK_17.0.2/examples/ directory.
 The application is built to be used with the official nRF5 SDK that can be downloaded from developer.nordicsemi.com
-
-
