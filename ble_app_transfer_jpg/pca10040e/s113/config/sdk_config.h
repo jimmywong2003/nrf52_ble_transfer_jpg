@@ -9,7 +9,11 @@
  * 1. Redistributions of source code must retain the above copyright notice, this
  *    list of conditions and the following disclaimer.
  *
+<<<<<<< HEAD
  * 2. Redistributions in binary form, except as embedded into a NordiRc
+=======
+ * 2. Redistributions in binary form, except as embedded into a Nordic
+>>>>>>> a26ee2a8e9b5d252c2980135adef63c66bc920d3
  *    Semiconductor ASA integrated circuit in a product or a software update for
  *    such product, must reproduce the above copyright notice, this list of
  *    conditions and the following disclaimer in the documentation and/or other
@@ -6850,7 +6854,11 @@
  
 
 #ifndef NRF_FPRINTF_FLAG_AUTOMATIC_CR_ON_LF_ENABLED
+<<<<<<< HEAD
 #define NRF_FPRINTF_FLAG_AUTOMATIC_CR_ON_LF_ENABLED 0
+=======
+#define NRF_FPRINTF_FLAG_AUTOMATIC_CR_ON_LF_ENABLED 1
+>>>>>>> a26ee2a8e9b5d252c2980135adef63c66bc920d3
 #endif
 
 // </h> 
@@ -9846,7 +9854,11 @@
 // <i> Requested BLE GAP data length to be negotiated.
 
 #ifndef NRF_SDH_BLE_GAP_DATA_LENGTH
+<<<<<<< HEAD
 #define NRF_SDH_BLE_GAP_DATA_LENGTH 251
+=======
+#define NRF_SDH_BLE_GAP_DATA_LENGTH 27
+>>>>>>> a26ee2a8e9b5d252c2980135adef63c66bc920d3
 #endif
 
 // <o> NRF_SDH_BLE_PERIPHERAL_LINK_COUNT - Maximum number of peripheral links. 

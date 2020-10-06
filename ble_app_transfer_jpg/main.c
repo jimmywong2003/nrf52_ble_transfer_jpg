@@ -76,8 +76,6 @@
 #include "nrf_log_ctrl.h"
 #include "nrf_log_default_backends.h"
 
-//#include "test_image.h"
-
 #if defined(UART_PRESENT)
 #include "nrf_uart.h"
 #endif
@@ -140,7 +138,6 @@
 #define IMAGE_BUFFER_SIZE 0x1000
 #endif
 
-BLE_NUS_DEF(m_nus, NRF_SDH_BLE_TOTAL_LINK_COUNT);                                   /**< BLE NUS service instance. */
 BLE_ITS_DEF(m_its, NRF_SDH_BLE_TOTAL_LINK_COUNT);                                   /**< BLE JPG Transfer service instance. */
 
 NRF_BLE_GATT_DEF(m_gatt);                                                       /**< GATT module instance. */
@@ -425,9 +422,9 @@ void gatt_evt_handler(nrf_ble_gatt_t * p_gatt, nrf_ble_gatt_evt_t const * p_evt)
                 m_ble_its_max_data_len = data_length;
                 NRF_LOG_INFO("gatt_event: Data len is set to 0x%X(%d)", data_length, data_length);
         }
-        //NRF_LOG_DEBUG("ATT MTU exchange completed. central 0x%x peripheral 0x%x",
-        //            p_gatt->att_mtu_desired_central,
-        //        p_gatt->att_mtu_desired_periph);
+        NRF_LOG_DEBUG("ATT MTU exchange completed. central 0x%x peripheral 0x%x",
+                      p_gatt->att_mtu_desired_central,
+                      p_gatt->att_mtu_desired_periph);
 }
 
 /**@brief Function for initializing the GATT module.
@@ -668,6 +665,7 @@ services_init(void)
         ble_nus_init_t nus_init;
         ble_its_init_t its_init;
 
+        ble_its_init_t its_init;
         // Initialize Queued Write Module.
         qwr_init.error_handler = nrf_qwr_error_handler;
 
@@ -686,9 +684,7 @@ services_init(void)
 
         // Initialize ITS.
         memset(&its_init, 0, sizeof(its_init));
-
         its_init.data_handler = its_data_handler;
-
         err_code = ble_its_init(&m_its, &its_init);
         APP_ERROR_CHECK(err_code);
 }
@@ -756,6 +752,8 @@ static void advertising_start(void)
 
         err_code = sd_ble_gap_adv_start(m_adv_handle, APP_BLE_CONN_CFG_TAG);
         APP_ERROR_CHECK(err_code);
+
+        NRF_LOG_INFO("Advertising Start");
 
         bsp_board_led_on(ADVERTISING_LED);
 }
@@ -1101,7 +1099,7 @@ static void serial_uart_response(serial_payload_file_cmd_t cmd)
 
 static void serial_uart_event_handler(nrf_drv_uart_event_t *p_event, void *p_context)
 {
-        static uint8_t data_array[BLE_NUS_MAX_DATA_LEN];
+        static uint8_t data_array[BLE_ITS_MAX_DATA_LEN];
         static uint8_t index = 0;
         static uint8_t total_len;
         static uint8_t is_first_byte = 1;
@@ -1158,7 +1156,7 @@ static uint32_t serial_file_transport_init(void)
         uint32_t err_code = NRF_SUCCESS;
         nrf_drv_uart_config_t uart_config = NRF_DRV_UART_DEFAULT_CONFIG;
         NRF_LOG_DEBUG("serial_file_transport_init()");
-       //uart_config.baudrate = NRF_UARTE_BAUDRATE_115200;
+        //uart_config.baudrate = NRF_UARTE_BAUDRATE_115200;
         uart_config.pseltxd = TX_PIN_NUMBER;
         uart_config.pselrxd = RX_PIN_NUMBER;
         uart_config.pselcts = CTS_PIN_NUMBER;
@@ -1207,7 +1205,6 @@ int main(void)
 
         // Initialize.
         log_init();
-        // uart_init();
         leds_init();
         timers_init();
         buttons_init();
